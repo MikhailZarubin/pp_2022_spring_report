@@ -1,0 +1,1280 @@
+\documentclass{report}
+
+\usepackage[warn]{mathtext}
+\usepackage[T2A]{fontenc}
+\usepackage[utf8]{luainputenc}
+\usepackage[english, russian]{babel}
+\usepackage[pdftex]{hyperref}
+\usepackage{tempora}
+\usepackage[12pt]{extsizes}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{geometry}
+\usepackage{enumitem}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{indentfirst}
+\usepackage{amsmath}
+
+\geometry{a4paper,top=2cm,bottom=2cm,left=2.5cm,right=1.5cm}
+\setlength{\parskip}{0.5cm}
+\setlist{nolistsep, itemsep=0.3cm,parsep=0pt}
+
+\usepackage{listings}
+\lstset{language=C++,
+        basicstyle=\footnotesize,
+		keywordstyle=\color{blue}\ttfamily,
+		stringstyle=\color{red}\ttfamily,
+		commentstyle=\color{green}\ttfamily,
+		morecomment=[l][\color{red}]{\#}, 
+		tabsize=4,
+		breaklines=true,
+  		breakatwhitespace=true,
+  		title=\lstname,       
+}
+
+\makeatletter
+\renewcommand\@biblabel[1]{#1.\hfil}
+\makeatother
+
+\begin{document}
+
+\begin{titlepage}
+
+\begin{center}
+Министерство науки и высшего образования Российской Федерации
+\end{center}
+
+\begin{center}
+Федеральное государственное автономное образовательное учреждение высшего образования \\
+Национальный исследовательский Нижегородский государственный университет им. Н.И. Лобачевского
+\end{center}
+
+\begin{center}
+Институт информационных технологий, математики и механики
+\end{center}
+
+\vspace{4em}
+
+\begin{center}
+\textbf{\LargeОтчет по лабораторной работе} \\
+\end{center}
+\begin{center}
+\textbf{\Large«Вычисление многомерных интегралов с использованием многошаговой схемы (метод Симпсона)»} \\
+\end{center}
+
+\vspace{4em}
+
+\newbox{\lbox}
+\savebox{\lbox}{\hbox{text}}
+\newlength{\maxl}
+\setlength{\maxl}{\wd\lbox}
+\hfill\parbox{7cm}{
+\hspace*{5cm}\hspace*{-5cm}\textbf{Выполнил:} \\ студент группы 381906-3 \\ Зарубин М.П.\\
+\\
+\hspace*{5cm}\hspace*{-5cm}\textbf{Проверил:}\\ доцент кафедры МОСТ, \\ кандидат технических наук \\ Сысоев А. В.\\
+}
+\vspace{\fill}
+
+\begin{center} Нижний Новгород \\ 2022 \end{center}
+
+\end{titlepage}
+
+\setcounter{page}{2}
+
+% Содержание
+\tableofcontents
+\newpage
+
+% Введение
+\section*{Введение}
+\addcontentsline{toc}{section}{Введение}
+\par Вычисление многомерных интегралов - математически сложная, но регулярно используемая во многих проектах задача, поэтому на сегодняшний день существуют различные алгоритмы ее решения, которые можно подразделить на точные и приближенные. Методы, вычисляющие точное значение интеграла, сложны в реализации и работают сравниетльно долго, а вот варианты, считающие результат приближенно, прекрасно подходят для большинства компьютерных программ, так как их ошибка достаточно мала и компенсируется высокой скорстью вычислений. Метод Симпсона - один из таких алгоритмов, приближающий подынтегральную функцию некоторым количеством парабол.
+\newpage
+
+% Постановка задачи
+\section*{Постановка задачи}
+\addcontentsline{toc}{section}{Постановка задачи}
+\par В данной лабораторной работе требуется реализовать последовательную и параллельные версии алгоримта вычисления многомерных интегралов методом Симпсона, используя технологии OpenMP, TBB и std::thread. Для проверки корректности выполненной задачи необходимо провести тестирование написанной программы посредством фреймворка Google Test. 
+\par Также нужно сделать выводы об эффективности распараллеливания с помощью той или иной технологии, замерив и сравнив время работы алгоритма на одинаковых данных.
+\newpage
+
+% Описание алгоритма
+\section*{Описание алгоритма}
+\addcontentsline{toc}{section}{Описание алгоритма}
+\par Вычисление интегралов с использованием многошаговой схемы подразумевает приближение подинтегральной функции с помощью более простых функций - в методе Симпсона используются параболы. Точность вычисления зависит от количества разбиений, то есть количества приближающих подинтегральную функцию парабол, поэтому для начала мы задаем это число, а после считаем значение интеграла на каждом отрезке. 
+\par Для одномерного интеграла метод Симпсона описывает данный процесс следующим выражением: $$ \frac{(b - a)} {6 * k} * (f_{a} + 4 * f_{m} + f_{b})$$где $b$ и $а$ верхняя и нижняя границы интегрируемого диапазона, $k$ - число разбиений, а $f_{a}$, $f_{m}$ и $f_b$ значения функции в левой, средней и правой точках интервала.
+\par В случае, если стоит задача вычислить многомерный интеграл, нам необходимо применить формулу на каждой размерности и перемножить полученные результаты. 
+\newpage
+
+% Описание схемы распараллеливания
+\section*{Описание схемы распараллеливания}
+\addcontentsline{toc}{section}{Описание схемы распараллеливания}
+\par Распараллеливание программы происходит с помощью распределения данных и вычислительных операций между потоками. То есть мы разбиваем основной и наиболее трудоимкий цикл, реализующий формулу Симпсона, на несколько циклов с меньшим количеством итераций, которые выполняются независимо на разных потоках.
+\par В OpenMP распределение происходит автоматически, мы лишь указываем приватные (разделяемые между потоками) и локальные (не разделяемые между потоками) переменные через директиву \#pragma omp parallel. Для суммирования вычисленных значений и получения конечного результата в главном потоке применяется редукция.
+\par В TBB распределение также происходит автоматически, и в случае использования функционального подхода с tbb::parallel\_reduce, который оказался наиболее подходящим для моей задачи, требуется указать только диапазон blocked\_range, начальное значение редуцируемой переменной, функцию в виде лямбда-выражения и операцию, которую будет использовать редукция для формирования конечного результата.
+\par Распрараллеливание с использованием std::thread требует больше действий от программиста, предоставляя лишь сущность потока (thread), куда мы можем передать функцию и необходимые ей параметры. Вычисление количества операций на поток производим вручную, то есть вычисляем стартовое и конечное значение переменной цикла в зависимости от номера потока. Суммирование полученных результатов также делаем сами - для этого я передавал в функцию указатель на i-ый элемент вектора, где i - номер потока, после записывал в эту память результат, а по завершению работы потока уже в основной функции суммировал полученное в каждом потоке значение в единую переменную. 
+\newpage
+
+% Описание программной реализации
+\section*{Описание программной реализации}
+\addcontentsline{toc}{section}{Описание программной реализации}
+Программа состоит из заголовочного файла simpson\_method.h и двух файлов исходного кода simpson\_method.cpp и main.cpp.
+\par В заголовочном файле находятся прототипы функций для последовательного и параллельных алгоритмов вычисления интеграла методом Симпсона, в simpson\_method.cpp - их реализация, а файл main.cpp содержит тесты, проверяющие корректность и эффективность работы программы.
+\par Функция для последовательного алгоритма:
+\begin{lstlisting}
+double simpsonMethodSeq(sizeType dimension,
+    std::vector<double> leftBorders, std::vector<double> rightBorders,
+    std::function<double(std::vector<double>)> function, std::vector<sizeType> countParts);
+\end{lstlisting}
+\par Функция для параллельного алгоритма:
+\begin{lstlisting}
+double simpsonMethodParallel(sizeType dimension,
+    std::vector<double> leftBorders, std::vector<double> rightBorders,
+    std::function<double(std::vector<double>)> function, std::vector<sizeType> countParts,
+    int threadCount);
+\end{lstlisting}
+\par Параметр dimension соответствует размерности функции, вектора leftBorders и rightBorders содержат нижние и верхние границы интеграла по каждой из переменной, function - исходная функция, а в векторе countParts записано число разбиений по размерностям. Параллельная функция также принимает параметр threadCount, куда мы можем передать желаемое число задействованных потоков.
+\newpage
+
+% Подтверждение корректности
+\section*{Подтверждение корректности}
+\addcontentsline{toc}{section}{Подтверждение корректности}
+Для подтверждения корректности реализованного метода Симпсона я написал 6 тестов для каждой из версий алгоритма (последовательной и параллельных). Один из них проверяет, что функция не выбрасывает исключений во время работы, в остальных сравнивается вычисленное программой значение интеграла с правильным ответом. Тестирование происходит на функциях от 1, 2, 3, 4 и 5 переменных.
+\par Также предусмотрен тест на эффективность, вычисляющий ускорение параллельной версии относительно последовательной.
+\newpage
+
+% Результаты экспериментов
+\section*{Результаты экспериментов}
+\addcontentsline{toc}{section}{Результаты экспериментов}
+Вычислительные эксперименты для оценки эффективности работы параллельных алгоритмов проводились на ноутбуке со следующими характеристиками:
+\begin{itemize}
+\item Процессор: AMD Ryzen 5 5500U, 2.1 ГГц (4.0 ГГц, в режиме Turbo), количество ядер: 6 физических, 12 логических;
+\item Оперативная память: 16 ГБ (DDR4), 3200 МГц;
+\item Операционная система: Windows 10 Home.
+\end{itemize}
+
+\par Эксперименты проводились на 12 потоках и функции 5 переменных с разбиением 7 по каждой размерности. 
+
+\par Результаты экспериментов представлены в Таблице.
+\begin{table}[!h]
+\caption{Результаты вычислительных экспериментов}
+\centering
+\begin{tabular}{| p{2cm} | p{3cm} | p{4cm} | p{2cm} |}
+\hline
+Версия алгоритма & Время работы (в секундах) & Ускорение  \\[5pt]
+\hline
+Sequential        & 13.878527        & -         \\
+OpenMP        & 2.381890        & 5.826687         \\
+TBB       & 1.537655        & 9.025774      \\
+std::thread        &  1.998000        & 6.946210           \\
+
+\hline
+\end{tabular}
+\end{table}
+
+\newpage
+
+% Выводы из результатов экспериментов
+\section*{Выводы из результатов экспериментов}
+\addcontentsline{toc}{section}{Выводы из результатов экспериментов}
+Из данных, полученных в результате экспериментов, можно сделать вывод, что параллельные версии работают намного быстрее, чем последовательная. Во всех случаях удалось достичь ускорения более, чем в 5 раз, а наилучшие результаты показал TBB, улучшив производительность программы в 9 раз. Также стоит отметить, что ускорение оказалось меньше числа задействованных потоков, так как помимо нашей программы в системе работают и другие, конкурируя за ресурсы процессора. 
+\newpage
+
+% Заключение
+\section*{Заключение}
+\addcontentsline{toc}{section}{Заключение}
+В рамках лабораторной работы были реализованы последовательный и параллельный алгоритмы вычисления многомерных интегралов с использованием многошаговой схемы (метод Симпсона). Проведенные тесты показали корректность написанного кода, а замеры времени - эффективность параллельных версий.
+\newpage
+
+% Литература
+\section*{Литература}
+\addcontentsline{toc}{section}{Литература}
+\begin{enumerate}
+\item Метод Симпсона - Электронный ресурс. URL: \newline \url{https://en.wikipedia.org/wiki/Simpson%27s_rule}
+\item OpenMP - Электронный ресурс. URL: \newline \url{https://www.openmp.org/wp-content/uploads/OpenMP-4.0-C.pdf}
+\item TBB - Электронный ресурс. URL: \newline \url{https://habr.com/ru/post/102670/}
+\item std::thread - Электронный ресурс. URL: \newline \url{https://en.cppreference.com/w/cpp/thread/thread}
+\item А.В. Сысоев, И.Б. Мееров, А.А. Сиднев «Средства разработки параллельных программ для систем с общей памятью. Библиотека Intel Threading Building Blocks». Нижний Новгород, 2007, 128 с.
+\end{enumerate} 
+\newpage
+
+% Приложение
+\section*{Приложение}
+\addcontentsline{toc}{section}{Приложение}
+\textbf{Последовательная версия}
+\newline
+\newline simpson\_method.h
+\begin{lstlisting}
+// Copyright 2022 Zarubin Mikhail
+
+#ifndef MODULES_TASK_1_ZARUBIN_M_SIMPSON_METHOD_SIMPSON_METHOD_H_
+#define MODULES_TASK_1_ZARUBIN_M_SIMPSON_METHOD_SIMPSON_METHOD_H_
+
+#include<functional>
+#include<vector>
+
+const double ERROR = 0.001;
+
+using sizeType = std::vector<double>::size_type;
+
+
+double simpsonMethod(sizeType dimension,
+    std::vector<double> leftBorders, std::vector<double> rightBorders,
+    std::function<double(std::vector<double>)> function, std::vector<sizeType> countParts);
+
+#endif  // MODULES_TASK_1_ZARUBIN_M_SIMPSON_METHOD_SIMPSON_METHOD_H_
+
+\end{lstlisting}
+simpson\_method.cpp
+\begin{lstlisting}
+// Copyright 2022 Zarubin Mikhail
+
+#include <random>
+#include "../../../modules/task_1/zarubin_m_simpson_method/simpson_method.h"
+
+struct Partition {
+    double left;
+    double center;
+    double right;
+
+    Partition() = default;
+    Partition(double _left, double _center, double _right) :
+        left(_left),
+        center(_center),
+        right(_right)
+    {};
+};
+
+double simpsonMethod(sizeType dimension,
+    std::vector<double> leftBorders, std::vector<double> rightBorders,
+    std::function<double(std::vector<double>)> function, std::vector<sizeType> countParts) {
+    std::vector<double> coeffs(dimension);
+    sizeType iterCount = 1;
+
+    for (sizeType i = 0; i < dimension; i++) {
+        coeffs[i] = (rightBorders[i] - leftBorders[i]) / countParts[i];
+        iterCount *= countParts[i];
+    }
+
+    double integralValue = 0.0;
+    sizeType count = static_cast<sizeType>(std::pow(6, dimension));
+    std::vector<Partition> partitions(dimension);
+    std::vector<double> args(dimension);
+
+    for (sizeType i = 0; i < iterCount; i++) {
+        sizeType temp = i;
+        for (sizeType j = 0; j < dimension; j++) {
+            double left = leftBorders[j] + temp % countParts[j] * coeffs[j];
+            double right = leftBorders[j] + temp % countParts[j] * coeffs[j] + coeffs[j];
+            double center = (right + left) / 2;
+
+            partitions[j] = Partition(left, center, right);
+
+            temp /= countParts[j];
+        }
+
+        for (sizeType k = 0; k < count; k++) {
+            temp = k;
+
+            for (sizeType j = 0; j < dimension; j++) {
+                switch (temp % 6) {
+                case 1:
+                    args[j] = partitions[j].right; break;
+                case 5:
+                    args[j] = partitions[j].left; break;
+                default:
+                    args[j] = partitions[j].center; break;
+                }
+
+                temp /= 6;
+            }
+
+            integralValue += function(args);
+        }
+    }
+
+    for (sizeType i = 0; i < dimension; i++) {
+        integralValue *= (coeffs[i] / 6);
+    }
+
+    return integralValue;
+}
+
+\end{lstlisting}
+main.cpp
+\begin{lstlisting}
+// Copyright 2022 Zarubin Mikhail
+
+#include <gtest/gtest.h>
+#include "./simpson_method.h"
+
+
+TEST(SimpsonMethod, can_run_simpson_method) {
+    std::vector<double> leftsBorders = { 1, 2 };
+    std::vector<double> rightBorders = { 11, 9 };
+    std::function<double(std::vector<double>)> func =
+        [](std::vector<double> args) { return args[0] * args[1]; };
+    sizeType dimension = 2;
+    std::vector<sizeType> countParts = { 8, 4 };
+
+    ASSERT_NO_THROW(simpsonMethod(dimension, leftsBorders, rightBorders,
+        func, countParts));
+}
+
+TEST(SimpsonMethod, simpos_method_works_correctly_with_one_variable) {
+    std::vector<double> leftsBorders = { 2 };
+    std::vector<double> rightBorders = { 4 };
+    std::function<double(std::vector<double>)> funcOneVariable =
+        [](std::vector<double> args) { return args[0]; };
+    sizeType dimension = 1;
+    std::vector<sizeType> countParts = { 10 };
+
+    double expectedResult = 6.0;
+    double result = simpsonMethod(dimension, leftsBorders, rightBorders,
+        funcOneVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, ERROR);
+}
+
+TEST(SimpsonMethod, simpos_method_works_correctly_with_two_variable) {
+    std::vector<double> leftsBorders = { 2, -1};
+    std::vector<double> rightBorders = { 4, 5 };
+    std::function<double(std::vector<double>)> funcTwoVariable =
+        [](std::vector<double> args) { return args[0] * args[1]; };
+    sizeType dimension = 2;
+    std::vector<sizeType> countParts = { 5, 5 };
+
+    double expectedResult = 72.0;
+    double result = simpsonMethod(dimension, leftsBorders, rightBorders,
+        funcTwoVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, ERROR);
+}
+
+TEST(SimpsonMethod, simpos_method_works_correctly_with_three_variable) {
+    std::vector<double> leftsBorders = { 2, -1, 0 };
+    std::vector<double> rightBorders = { 4, 5, 3 };
+    std::function<double(std::vector<double>)> funcThreeVariable =
+        [](std::vector<double> args) { return args[0] * args[1] * args[2]; };
+    sizeType dimension = 3;
+    std::vector<sizeType> countParts = { 4, 4, 4 };
+
+    double expectedResult = 324.0;
+    double result = simpsonMethod(dimension, leftsBorders, rightBorders,
+        funcThreeVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, ERROR);
+}
+
+TEST(SimpsonMethod, simpos_method_works_correctly_with_four_variable) {
+    std::vector<double> leftsBorders = { 2, -1, 0, -3 };
+    std::vector<double> rightBorders = { 4, 5, 3, 1 };
+    std::function<double(std::vector<double>)> funcFourVariable =
+        [](std::vector<double> args) { return args[0] * args[1] * args[2] * args[3]; };
+    sizeType dimension = 4;
+    std::vector<sizeType> countParts = { 3, 3, 3, 3 };
+
+    double expectedResult = -1296.0;
+    double result = simpsonMethod(dimension, leftsBorders, rightBorders,
+        funcFourVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, ERROR);
+}
+
+TEST(SimpsonMethod, simpos_method_works_correctly_with_five_variable) {
+    std::vector<double> leftsBorders = { 2, -1, 0, -3, 1 };
+    std::vector<double> rightBorders = { 4, 5, 3, 1, 2 };
+    std::function<double(std::vector<double>)> funcFiveVariable =
+        [](std::vector<double> args) { return args[0] * args[1] * args[2] * args[3] * args[4]; };
+    sizeType dimension = 5;
+    std::vector<sizeType> countParts = { 2, 2, 2, 2, 2 };
+
+    double expectedResult = -1944.0;
+    double result = simpsonMethod(dimension, leftsBorders, rightBorders,
+        funcFiveVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, ERROR);
+}
+
+\end{lstlisting}
+
+\textbf{OpenMP version}
+\newline
+\newline simpson\_method.h
+\begin{lstlisting}
+// Copyright 2022 Zarubin Mikhail
+
+#ifndef MODULES_TASK_2_ZARUBIN_M_SIMPSON_METHOD_SIMPSON_METHOD_H_
+#define MODULES_TASK_2_ZARUBIN_M_SIMPSON_METHOD_SIMPSON_METHOD_H_
+
+#include <functional>
+#include <vector>
+
+const double ERROR = 0.001;
+
+using sizeType = std::vector<double>::size_type;
+
+
+double simpsonMethodSeq(sizeType dimension,
+    std::vector<double> leftBorders, std::vector<double> rightBorders,
+    std::function<double(std::vector<double>)> function, std::vector<sizeType> countParts);
+
+double simpsonMethodParallel(sizeType dimension,
+    std::vector<double> leftBorders, std::vector<double> rightBorders,
+    std::function<double(std::vector<double>)> function, std::vector<sizeType> countParts);
+
+#endif  // MODULES_TASK_2_ZARUBIN_M_SIMPSON_METHOD_SIMPSON_METHOD_H_
+
+\end{lstlisting}
+simpson\_method.cpp
+\begin{lstlisting}
+// Copyright 2022 Zarubin Mikhail
+
+#include <omp.h>
+#include <random>
+#include "../../../modules/task_2/zarubin_m_simpson_method/simpson_method.h"
+
+struct Partition {
+    double left;
+    double center;
+    double right;
+
+    Partition() = default;
+    Partition(double _left, double _center, double _right) :
+        left(_left),
+        center(_center),
+        right(_right)
+    {};
+};
+
+double simpsonMethodSeq(sizeType dimension,
+    std::vector<double> leftBorders, std::vector<double> rightBorders,
+    std::function<double(std::vector<double>)> function, std::vector<sizeType> countParts) {
+    std::vector<double> coeffs(dimension);
+    sizeType iterCount = 1;
+
+    for (sizeType i = 0; i < dimension; i++) {
+        coeffs[i] = (rightBorders[i] - leftBorders[i]) / countParts[i];
+        iterCount *= countParts[i];
+    }
+
+    double integralValue = 0.0;
+    sizeType count = static_cast<sizeType>(std::pow(6, dimension));
+    std::vector<Partition> partitions(dimension);
+    std::vector<double> args(dimension);
+
+    for (sizeType i = 0; i < iterCount; i++) {
+        sizeType temp = i;
+        for (sizeType j = 0; j < dimension; j++) {
+            double left = leftBorders[j] + temp % countParts[j] * coeffs[j];
+            double right = leftBorders[j] + temp % countParts[j] * coeffs[j] + coeffs[j];
+            double center = (right + left) / 2;
+
+            partitions[j] = Partition(left, center, right);
+
+            temp /= countParts[j];
+        }
+
+        for (sizeType k = 0; k < count; k++) {
+            temp = k;
+
+            for (sizeType j = 0; j < dimension; j++) {
+                switch (temp % 6) {
+                case 1:
+                    args[j] = partitions[j].right; break;
+                case 5:
+                    args[j] = partitions[j].left; break;
+                default:
+                    args[j] = partitions[j].center; break;
+                }
+
+                temp /= 6;
+            }
+
+            integralValue += function(args);
+        }
+    }
+
+    for (sizeType i = 0; i < dimension; i++) {
+        integralValue *= (coeffs[i] / 6);
+    }
+
+    return integralValue;
+}
+
+double simpsonMethodParallel(sizeType dimension,
+    std::vector<double> leftBorders, std::vector<double> rightBorders,
+    std::function<double(std::vector<double>)> function, std::vector<sizeType> countParts) {
+    std::vector<double> coeffs(dimension);
+    sizeType iterCount = 1;
+
+    for (sizeType i = 0; i < dimension; i++) {
+        coeffs[i] = (rightBorders[i] - leftBorders[i]) / countParts[i];
+        iterCount *= countParts[i];
+    }
+
+    double integralValue = 0.0;
+    sizeType count = static_cast<sizeType>(std::pow(6, dimension));
+    std::vector<Partition> partitions(dimension);
+    std::vector<double> args(dimension);
+
+#pragma omp parallel shared(dimension, iterCount, coeffs, leftBorders, count, countParts) \
+  firstprivate(partitions, args) reduction(+ : integralValue)
+#pragma omp for schedule(static)
+    for (int i = 0; i < static_cast<int>(iterCount); i++) {
+        sizeType temp = i;
+        for (sizeType j = 0; j < dimension; j++) {
+            double left = leftBorders[j] + temp % countParts[j] * coeffs[j];
+            double right = leftBorders[j] + temp % countParts[j] * coeffs[j] + coeffs[j];
+            double center = (right + left) / 2;
+
+            partitions[j] = Partition(left, center, right);
+
+            temp /= countParts[j];
+        }
+
+        for (sizeType k = 0; k < count; k++) {
+            temp = k;
+
+            for (sizeType j = 0; j < dimension; j++) {
+                switch (temp % 6) {
+                case 1:
+                    args[j] = partitions[j].right; break;
+                case 5:
+                    args[j] = partitions[j].left; break;
+                default:
+                    args[j] = partitions[j].center; break;
+                }
+
+                temp /= 6;
+            }
+
+            integralValue += function(args);
+        }
+    }
+
+#pragma omp for schedule(static)
+    for (int i = 0; i < static_cast<int>(dimension); i++) {
+        integralValue *= (coeffs[i] / 6);
+    }
+
+    return integralValue;
+}
+
+\end{lstlisting}
+main.cpp
+\begin{lstlisting}
+// Copyright 2022 Zarubin Mikhail
+
+#include <gtest/gtest.h>
+#include <omp.h>
+#include "./simpson_method.h"
+
+
+TEST(SimpsonMethod, can_run_simpson_method_parallel) {
+    std::vector<double> leftsBorders = { 1, 2 };
+    std::vector<double> rightBorders = { 11, 9 };
+    std::function<double(std::vector<double>)> func =
+        [](std::vector<double> args) { return args[0] * args[1]; };
+    sizeType dimension = 2;
+    std::vector<sizeType> countParts = { 8, 4 };
+
+    ASSERT_NO_THROW(simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        func, countParts));
+}
+
+TEST(SimpsonMethod, simpos_method_parallel_works_correctly_with_one_variable) {
+    std::vector<double> leftsBorders = { 2 };
+    std::vector<double> rightBorders = { 4 };
+    std::function<double(std::vector<double>)> funcOneVariable =
+        [](std::vector<double> args) { return args[0]; };
+    sizeType dimension = 1;
+    std::vector<sizeType> countParts = { 10 };
+
+    double expectedResult = 6.0;
+    double result = simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        funcOneVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, ERROR);
+}
+
+TEST(SimpsonMethod, simpos_method_parallel_works_correctly_with_two_variable) {
+    std::vector<double> leftsBorders = { 2, -1 };
+    std::vector<double> rightBorders = { 4, 5 };
+    std::function<double(std::vector<double>)> funcTwoVariable =
+        [](std::vector<double> args) { return args[0] * args[1]; };
+    sizeType dimension = 2;
+    std::vector<sizeType> countParts = { 5, 5 };
+
+    double expectedResult = 72.0;
+    double result = simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        funcTwoVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, ERROR);
+}
+
+TEST(SimpsonMethod, simpos_method_parallel_works_correctly_with_three_variable) {
+    std::vector<double> leftsBorders = { 2, -1, 0 };
+    std::vector<double> rightBorders = { 4, 5, 3 };
+    std::function<double(std::vector<double>)> funcThreeVariable =
+        [](std::vector<double> args) { return args[0] * args[1] * args[2]; };
+    sizeType dimension = 3;
+    std::vector<sizeType> countParts = { 4, 4, 4 };
+
+    double expectedResult = 324.0;
+    double result = simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        funcThreeVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, ERROR);
+}
+
+TEST(SimpsonMethod, simpos_method_parallel_works_correctly_with_four_variable) {
+    std::vector<double> leftsBorders = { 2, -1, 0, -3 };
+    std::vector<double> rightBorders = { 4, 5, 3, 1 };
+    std::function<double(std::vector<double>)> funcFourVariable =
+        [](std::vector<double> args) { return args[0] * args[1] * args[2] * args[3]; };
+    sizeType dimension = 4;
+    std::vector<sizeType> countParts = { 3, 3, 3, 3 };
+
+    double expectedResult = -1296.0;
+    double result = simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        funcFourVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, ERROR);
+}
+
+TEST(SimpsonMethod, simpos_method_parallel_works_correctly_with_five_variable) {
+    std::vector<double> leftsBorders = { 2, -1, 0, -3, 1 };
+    std::vector<double> rightBorders = { 4, 5, 3, 1, 2 };
+    std::function<double(std::vector<double>)> funcFiveVariable =
+        [](std::vector<double> args) { return args[0] * args[1] * args[2] * args[3] * args[4]; };
+    sizeType dimension = 5;
+    std::vector<sizeType> countParts = { 2, 2, 2, 2, 2 };
+
+    double expectedResult = -1944.0;
+    double result = simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        funcFiveVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, ERROR);
+}
+
+TEST(DISABLED_SimpsonMethod, boost_test) {
+    std::vector<double> leftsBorders = { 2, -1, 0, -3, 1 };
+    std::vector<double> rightBorders = { 4, 5, 3, 1, 2 };
+    std::function<double(std::vector<double>)> funcFiveVariable =
+        [](std::vector<double> args) { return args[0] * args[1] * args[2] * args[3] * args[4]; };
+    sizeType dimension = 5;
+    std::vector<sizeType> countParts(5, 6);
+
+    auto startSeq = omp_get_wtime();
+    simpsonMethodSeq(dimension, leftsBorders, rightBorders, funcFiveVariable, countParts);
+    auto finishSeq = omp_get_wtime();
+
+    omp_set_num_threads(6);
+    auto startParallel = omp_get_wtime();
+    simpsonMethodParallel(dimension, leftsBorders, rightBorders, funcFiveVariable, countParts);
+    auto finishParallel = omp_get_wtime();
+
+    auto seqTime = finishSeq - startSeq;
+    auto parallelTime = finishParallel - startParallel;
+    auto boost = seqTime / parallelTime;
+
+    printf("seqTime = %lf\nparallelTime = %lf\nboost = %lf\n", seqTime, parallelTime, boost);
+}
+
+\end{lstlisting}
+
+\textbf{TBB version}
+\newline
+\newline simpson\_method.h
+\begin{lstlisting}
+// Copyright 2022 Zarubin Mikhail
+
+#ifndef MODULES_TASK_3_ZARUBIN_M_SIMPSON_METHOD_SIMPSON_METHOD_H_
+#define MODULES_TASK_3_ZARUBIN_M_SIMPSON_METHOD_SIMPSON_METHOD_H_
+
+#include <tbb/task_scheduler_init.h>
+#include <functional>
+#include <vector>
+
+using sizeType = std::vector<double>::size_type;
+
+
+double simpsonMethodSeq(sizeType dimension,
+    std::vector<double> leftBorders, std::vector<double> rightBorders,
+    std::function<double(std::vector<double>)> function, std::vector<sizeType> countParts);
+
+double simpsonMethodParallel(sizeType dimension,
+    std::vector<double> leftBorders, std::vector<double> rightBorders,
+    std::function<double(std::vector<double>)> function, std::vector<sizeType> countParts,
+    int processCount = tbb::task_scheduler_init::default_num_threads());
+
+#endif  // MODULES_TASK_3_ZARUBIN_M_SIMPSON_METHOD_SIMPSON_METHOD_H_
+
+\end{lstlisting}
+simpson\_method.cpp
+\begin{lstlisting}
+// Copyright 2022 Zarubin Mikhail
+
+#include <tbb/blocked_range.h>
+#include <tbb/parallel_reduce.h>
+#include <random>
+#include "../../../modules/task_3/zarubin_m_simpson_method/simpson_method.h"
+
+
+struct Partition {
+    double left;
+    double center;
+    double right;
+
+    Partition() = default;
+    Partition(double _left, double _center, double _right) :
+        left(_left),
+        center(_center),
+        right(_right)
+    {};
+};
+
+double simpsonMethodSeq(sizeType dimension,
+    std::vector<double> leftBorders, std::vector<double> rightBorders,
+    std::function<double(std::vector<double>)> function, std::vector<sizeType> countParts) {
+    std::vector<double> coeffs(dimension);
+    sizeType iterCount = 1;
+
+    for (sizeType i = 0; i < dimension; i++) {
+        coeffs[i] = (rightBorders[i] - leftBorders[i]) / countParts[i];
+        iterCount *= countParts[i];
+    }
+
+    double integralValue = 0.0;
+    sizeType count = static_cast<sizeType>(std::pow(6, dimension));
+    std::vector<Partition> partitions(dimension);
+    std::vector<double> args(dimension);
+
+    for (sizeType i = 0; i < iterCount; i++) {
+        sizeType temp = i;
+        for (sizeType j = 0; j < dimension; j++) {
+            double left = leftBorders[j] + temp % countParts[j] * coeffs[j];
+            double right = leftBorders[j] + temp % countParts[j] * coeffs[j] + coeffs[j];
+            double center = (right + left) / 2;
+
+            partitions[j] = Partition(left, center, right);
+
+            temp /= countParts[j];
+        }
+
+        for (sizeType k = 0; k < count; k++) {
+            temp = k;
+
+            for (sizeType j = 0; j < dimension; j++) {
+                switch (temp % 6) {
+                case 1:
+                    args[j] = partitions[j].right; break;
+                case 5:
+                    args[j] = partitions[j].left; break;
+                default:
+                    args[j] = partitions[j].center; break;
+                }
+
+                temp /= 6;
+            }
+
+            integralValue += function(args);
+        }
+    }
+
+    for (sizeType i = 0; i < dimension; i++) {
+        integralValue *= (coeffs[i] / 6);
+    }
+
+    return integralValue;
+}
+
+double simpsonMethodParallel(sizeType dimension,
+    std::vector<double> leftBorders, std::vector<double> rightBorders,
+    std::function<double(std::vector<double>)> function, std::vector<sizeType> countParts,
+    int processCount) {
+    std::vector<double> coeffs(dimension);
+    sizeType iterCount = 1;
+    double multiplier = 1;
+
+    for (sizeType i = 0; i < dimension; i++) {
+        coeffs[i] = (rightBorders[i] - leftBorders[i]) / countParts[i];
+        iterCount *= countParts[i];
+        multiplier *= coeffs[i] / 6.0;
+    }
+
+    tbb::task_scheduler_init init(processCount);
+    double result = tbb::parallel_reduce(
+        tbb::blocked_range<sizeType>(0, iterCount), 0.0,
+        [&](tbb::blocked_range<sizeType> r, double integralValue) {
+            sizeType count = static_cast<sizeType>(std::pow(6, dimension));
+            std::vector<Partition> partitions(dimension);
+            std::vector<double> args(dimension);
+
+            for (sizeType i = r.begin(); i != r.end(); i++) {
+                sizeType temp = i;
+                for (sizeType j = 0; j < dimension; j++) {
+                    double left = leftBorders[j] + temp % countParts[j] * coeffs[j];
+                    double right = leftBorders[j] + temp % countParts[j] * coeffs[j] + coeffs[j];
+                    double center = (right + left) / 2;
+
+                    partitions[j] = Partition(left, center, right);
+
+                    temp /= countParts[j];
+                }
+
+                for (sizeType k = 0; k < count; k++) {
+                    temp = k;
+
+                    for (sizeType j = 0; j < dimension; j++) {
+                        switch (temp % 6) {
+                        case 1:
+                            args[j] = partitions[j].right; break;
+                        case 5:
+                            args[j] = partitions[j].left; break;
+                        default:
+                            args[j] = partitions[j].center; break;
+                        }
+
+                        temp /= 6;
+                    }
+
+                    integralValue += multiplier * function(args);
+                }
+            }
+            return integralValue;
+        },
+        std::plus<double>());
+    return result;
+}
+
+\end{lstlisting}
+main.cpp
+\begin{lstlisting}
+// Copyright 2022 Zarubin Mikhail
+
+#include <gtest/gtest.h>
+#include <tbb/tick_count.h>
+#include "./simpson_method.h"
+
+
+TEST(SimpsonMethod, can_run_simpson_method_parallel) {
+    std::vector<double> leftsBorders = { 1, 2 };
+    std::vector<double> rightBorders = { 11, 9 };
+    std::function<double(std::vector<double>)> func =
+        [](std::vector<double> args) { return args[0] * args[1]; };
+    sizeType dimension = 2;
+    std::vector<sizeType> countParts = { 8, 4 };
+
+    ASSERT_NO_THROW(simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        func, countParts));
+}
+
+TEST(SimpsonMethod, simpos_method_parallel_works_correctly_with_one_variable) {
+    std::vector<double> leftsBorders = { 2 };
+    std::vector<double> rightBorders = { 4 };
+    std::function<double(std::vector<double>)> funcOneVariable =
+        [](std::vector<double> args) { return args[0]; };
+    sizeType dimension = 1;
+    std::vector<sizeType> countParts(1, 10);
+
+    double expectedResult = 6.0;
+    double result = simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        funcOneVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, 0.001);
+}
+
+TEST(SimpsonMethod, simpos_method_parallel_works_correctly_with_two_variable) {
+    std::vector<double> leftsBorders = { 2, -1 };
+    std::vector<double> rightBorders = { 4, 5 };
+    std::function<double(std::vector<double>)> funcTwoVariable =
+        [](std::vector<double> args) { return args[0] * args[1]; };
+    sizeType dimension = 2;
+    std::vector<sizeType> countParts(2, 4);
+
+    double expectedResult = 72.0;
+    double result = simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        funcTwoVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, 0.001);
+}
+
+TEST(SimpsonMethod, simpos_method_parallel_works_correctly_with_three_variable) {
+    std::vector<double> leftsBorders = { 2, -1, 0 };
+    std::vector<double> rightBorders = { 4, 5, 3 };
+    std::function<double(std::vector<double>)> funcThreeVariable =
+        [](std::vector<double> args) { return args[0] * args[1] * args[2]; };
+    sizeType dimension = 3;
+    std::vector<sizeType> countParts(3, 3);
+
+    double expectedResult = 324.0;
+    double result = simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        funcThreeVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, 0.001);
+}
+
+TEST(SimpsonMethod, simpos_method_parallel_works_correctly_with_four_variable) {
+    std::vector<double> leftsBorders = { 2, -1, 0, -3 };
+    std::vector<double> rightBorders = { 4, 5, 3, 1 };
+    std::function<double(std::vector<double>)> funcFourVariable =
+        [](std::vector<double> args) { return args[0] * args[1] * args[2] * args[3]; };
+    sizeType dimension = 4;
+    std::vector<sizeType> countParts(4, 2);
+
+    double expectedResult = -1296.0;
+    double result = simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        funcFourVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, 0.001);
+}
+
+TEST(SimpsonMethod, simpos_method_parallel_works_correctly_with_five_variable) {
+    std::vector<double> leftsBorders = { 2, -1, 0, -3, 1 };
+    std::vector<double> rightBorders = { 4, 5, 3, 1, 2 };
+    std::function<double(std::vector<double>)> funcFiveVariable =
+        [](std::vector<double> args) { return args[0] * args[1] * args[2] * args[3] * args[4]; };
+    sizeType dimension = 5;
+    std::vector<sizeType> countParts(5, 2);
+
+    double expectedResult = -1944.0;
+    double result = simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        funcFiveVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, 0.001);
+}
+
+TEST(DISABLED_SimpsonMethod, boost_test) {
+    std::vector<double> leftsBorders = { 2, -1, 0, -3, 1 };
+    std::vector<double> rightBorders = { 4, 5, 3, 1, 2 };
+    std::function<double(std::vector<double>)> funcFiveVariable =
+        [](std::vector<double> args) { return args[0] * args[1] * args[2] * args[3] * args[4]; };
+    sizeType dimension = 5;
+    std::vector<sizeType> countParts(5, 7);
+
+    auto startSeq = tbb::tick_count::now();
+    simpsonMethodSeq(dimension, leftsBorders, rightBorders, funcFiveVariable, countParts);
+    auto finishSeq = tbb::tick_count::now();
+
+    auto startParallel = tbb::tick_count::now();
+    simpsonMethodParallel(dimension, leftsBorders, rightBorders, funcFiveVariable, countParts);
+    auto finishParallel = tbb::tick_count::now();
+
+    auto seqTime = (finishSeq - startSeq).seconds();
+    auto parallelTime = (finishParallel - startParallel).seconds();
+    auto boost = seqTime / parallelTime;
+
+    printf("seqTime = %lf\nparallelTime = %lf\nboost = %lf\n", seqTime, parallelTime, boost);
+}
+
+\end{lstlisting}
+
+\textbf{std::thread version}
+\newline
+\newline simpson\_method.h
+\begin{lstlisting}
+// Copyright 2022 Zarubin Mikhail
+
+#ifndef MODULES_TASK_4_ZARUBIN_M_SIMPSON_METHOD_SIMPSON_METHOD_H_
+#define MODULES_TASK_4_ZARUBIN_M_SIMPSON_METHOD_SIMPSON_METHOD_H_
+
+#include <functional>
+#include <vector>
+
+const double ERROR = 0.001;
+
+using sizeType = std::vector<double>::size_type;
+
+
+double simpsonMethodSeq(sizeType dimension,
+    std::vector<double> leftBorders, std::vector<double> rightBorders,
+    std::function<double(std::vector<double>)> function, std::vector<sizeType> countParts);
+
+double simpsonMethodParallel(sizeType dimension,
+    std::vector<double> leftBorders, std::vector<double> rightBorders,
+    std::function<double(std::vector<double>)> function, std::vector<sizeType> countParts,
+    sizeType threadsCount = 12);
+
+#endif  // MODULES_TASK_4_ZARUBIN_M_SIMPSON_METHOD_SIMPSON_METHOD_H_
+
+\end{lstlisting}
+simpson\_method.cpp
+\begin{lstlisting}
+// Copyright 2022 Zarubin Mikhail
+
+#include <random>
+#include "../../../3rdparty/unapproved/unapproved.h"
+#include "../../../modules/task_4/zarubin_m_simpson_method/simpson_method.h"
+
+struct Partition {
+    double left;
+    double center;
+    double right;
+
+    Partition() = default;
+    Partition(double _left, double _center, double _right) :
+        left(_left),
+        center(_center),
+        right(_right)
+    {};
+};
+
+double simpsonMethodSeq(sizeType dimension,
+    std::vector<double> leftBorders, std::vector<double> rightBorders,
+    std::function<double(std::vector<double>)> function, std::vector<sizeType> countParts) {
+    std::vector<double> coeffs(dimension);
+    sizeType iterCount = 1;
+
+    for (sizeType i = 0; i < dimension; i++) {
+        coeffs[i] = (rightBorders[i] - leftBorders[i]) / countParts[i];
+        iterCount *= countParts[i];
+    }
+
+    double integralValue = 0.0;
+    sizeType count = static_cast<sizeType>(std::pow(6, dimension));
+    std::vector<Partition> partitions(dimension);
+    std::vector<double> args(dimension);
+
+    for (sizeType i = 0; i < iterCount; i++) {
+        sizeType temp = i;
+        for (sizeType j = 0; j < dimension; j++) {
+            double left = leftBorders[j] + temp % countParts[j] * coeffs[j];
+            double right = leftBorders[j] + temp % countParts[j] * coeffs[j] + coeffs[j];
+            double center = (right + left) / 2;
+
+            partitions[j] = Partition(left, center, right);
+
+            temp /= countParts[j];
+        }
+
+        for (sizeType k = 0; k < count; k++) {
+            temp = k;
+
+            for (sizeType j = 0; j < dimension; j++) {
+                switch (temp % 6) {
+                case 1:
+                    args[j] = partitions[j].right; break;
+                case 5:
+                    args[j] = partitions[j].left; break;
+                default:
+                    args[j] = partitions[j].center; break;
+                }
+
+                temp /= 6;
+            }
+
+            integralValue += function(args);
+        }
+    }
+
+    for (sizeType i = 0; i < dimension; i++) {
+        integralValue *= (coeffs[i] / 6);
+    }
+
+    return integralValue;
+}
+
+void parallelSection(sizeType dimension, const std::vector<sizeType>& countParts,
+    const std::vector<double>& leftBorders, const std::vector<double>& rightBorders,
+    const std::vector<double>& coeffs, std::function<double(std::vector<double>)> function,
+    sizeType begin, sizeType end, double* returnableValue) {
+    double integralValue = 0.0;
+    sizeType count = static_cast<sizeType>(std::pow(6, dimension));
+    std::vector<Partition> partitions(dimension);
+    std::vector<double> args(dimension);
+    for (sizeType i = begin; i < end; i++) {
+        sizeType temp = i;
+        for (sizeType j = 0; j < dimension; j++) {
+            double left = leftBorders[j] + temp % countParts[j] * coeffs[j];
+            double right = leftBorders[j] + temp % countParts[j] * coeffs[j] + coeffs[j];
+            double center = (right + left) / 2;
+
+            partitions[j] = Partition(left, center, right);
+
+            temp /= countParts[j];
+        }
+
+        for (sizeType k = 0; k < count; k++) {
+            temp = k;
+
+            for (sizeType j = 0; j < dimension; j++) {
+                switch (temp % 6) {
+                case 1:
+                    args[j] = partitions[j].right; break;
+                case 5:
+                    args[j] = partitions[j].left; break;
+                default:
+                    args[j] = partitions[j].center; break;
+                }
+
+                temp /= 6;
+            }
+
+            integralValue += function(args);
+        }
+    }
+
+    for (sizeType i = 0; i < dimension; i++) {
+        integralValue *= (coeffs[i] / 6);
+    }
+
+    *returnableValue = integralValue;
+}
+
+double simpsonMethodParallel(sizeType dimension,
+    std::vector<double> leftBorders, std::vector<double> rightBorders,
+    std::function<double(std::vector<double>)> function, std::vector<sizeType> countParts,
+    sizeType threadsCount) {
+    std::vector<double> coeffs(dimension);
+    sizeType iterCount = 1;
+
+    for (sizeType i = 0; i < dimension; i++) {
+        coeffs[i] = (rightBorders[i] - leftBorders[i]) / countParts[i];
+        iterCount *= countParts[i];
+    }
+
+    std::vector<double> localIntegralValue(threadsCount, 0);
+    std::vector<std::thread> threads(threadsCount);
+    sizeType begin = 0, end = 0;
+    for (sizeType i = 0; i < threadsCount; i++) {
+        begin = end;
+        end = (iterCount / threadsCount) * (i + 1) + (i == threadsCount - 1 ? iterCount % threadsCount : 0);
+
+        threads[i] = std::thread(parallelSection, dimension, countParts,
+            leftBorders, rightBorders,
+            coeffs, function,
+            begin, end, &localIntegralValue[i]);
+    }
+
+    double integralValue = 0.0;
+    for (sizeType i = 0; i < threadsCount; i++) {
+        threads[i].join();
+        integralValue += localIntegralValue[i];
+    }
+
+    return integralValue;
+}
+
+\end{lstlisting}
+main.cpp
+\begin{lstlisting}
+
+#include <gtest/gtest.h>
+#include "./simpson_method.h"
+
+
+TEST(SimpsonMethod, can_run_simpson_method_parallel) {
+    std::vector<double> leftsBorders = { 1, 2 };
+    std::vector<double> rightBorders = { 11, 9 };
+    std::function<double(std::vector<double>)> func =
+        [](std::vector<double> args) { return args[0] * args[1]; };
+    sizeType dimension = 2;
+    std::vector<sizeType> countParts = { 8, 4 };
+
+    ASSERT_NO_THROW(simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        func, countParts));
+}
+
+TEST(SimpsonMethod, simpos_method_parallel_works_correctly_with_one_variable) {
+    std::vector<double> leftsBorders = { 2 };
+    std::vector<double> rightBorders = { 4 };
+    std::function<double(std::vector<double>)> funcOneVariable =
+        [](std::vector<double> args) { return args[0]; };
+    sizeType dimension = 1;
+    std::vector<sizeType> countParts = { 10 };
+
+    double expectedResult = 6.0;
+    double result = simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        funcOneVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, ERROR);
+}
+
+TEST(SimpsonMethod, simpos_method_parallel_works_correctly_with_two_variable) {
+    std::vector<double> leftsBorders = { 2, -1 };
+    std::vector<double> rightBorders = { 4, 5 };
+    std::function<double(std::vector<double>)> funcTwoVariable =
+        [](std::vector<double> args) { return args[0] * args[1]; };
+    sizeType dimension = 2;
+    std::vector<sizeType> countParts = { 5, 5 };
+
+    double expectedResult = 72.0;
+    double result = simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        funcTwoVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, ERROR);
+}
+
+TEST(SimpsonMethod, simpos_method_parallel_works_correctly_with_three_variable) {
+    std::vector<double> leftsBorders = { 2, -1, 0 };
+    std::vector<double> rightBorders = { 4, 5, 3 };
+    std::function<double(std::vector<double>)> funcThreeVariable =
+        [](std::vector<double> args) { return args[0] * args[1] * args[2]; };
+    sizeType dimension = 3;
+    std::vector<sizeType> countParts = { 4, 4, 4 };
+
+    double expectedResult = 324.0;
+    double result = simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        funcThreeVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, ERROR);
+}
+
+TEST(SimpsonMethod, simpos_method_parallel_works_correctly_with_four_variable) {
+    std::vector<double> leftsBorders = { 2, -1, 0, -3 };
+    std::vector<double> rightBorders = { 4, 5, 3, 1 };
+    std::function<double(std::vector<double>)> funcFourVariable =
+        [](std::vector<double> args) { return args[0] * args[1] * args[2] * args[3]; };
+    sizeType dimension = 4;
+    std::vector<sizeType> countParts = { 3, 3, 3, 3 };
+
+    double expectedResult = -1296.0;
+    double result = simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        funcFourVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, ERROR);
+}
+
+TEST(SimpsonMethod, simpos_method_parallel_works_correctly_with_five_variable) {
+    std::vector<double> leftsBorders = { 2, -1, 0, -3, 1 };
+    std::vector<double> rightBorders = { 4, 5, 3, 1, 2 };
+    std::function<double(std::vector<double>)> funcFiveVariable =
+        [](std::vector<double> args) { return args[0] * args[1] * args[2] * args[3] * args[4]; };
+    sizeType dimension = 5;
+    std::vector<sizeType> countParts = { 2, 2, 2, 2, 2 };
+
+    double expectedResult = -1944.0;
+    double result = simpsonMethodParallel(dimension, leftsBorders, rightBorders,
+        funcFiveVariable, countParts);
+
+    ASSERT_NEAR(expectedResult, result, ERROR);
+}
+
+TEST(DISABLED_SimpsonMethod, boost_test) {
+    std::vector<double> leftsBorders = { 2, -1, 0, -3, 1 };
+    std::vector<double> rightBorders = { 4, 5, 3, 1, 2 };
+    std::function<double(std::vector<double>)> funcFiveVariable =
+        [](std::vector<double> args) { return args[0] * args[1] * args[2] * args[3] * args[4]; };
+    sizeType dimension = 5;
+    std::vector<sizeType> countParts(5, 6);
+
+    auto startSeq = clock();
+    simpsonMethodSeq(dimension, leftsBorders, rightBorders, funcFiveVariable, countParts);
+    auto finishSeq = clock();
+
+    auto startParallel = clock();
+    simpsonMethodParallel(dimension, leftsBorders, rightBorders, funcFiveVariable, countParts);
+    auto finishParallel = clock();
+
+    auto seqTime = static_cast<double>(finishSeq - startSeq) / CLOCKS_PER_SEC;
+    auto parallelTime = static_cast<double>(finishParallel - startParallel) / CLOCKS_PER_SEC;
+    auto boost = seqTime / parallelTime;
+
+    printf("seqTime = %lf\nparallelTime = %lf\nboost = %lf\n", seqTime, parallelTime, boost);
+}
+
+\end{lstlisting}
+\end{document}
